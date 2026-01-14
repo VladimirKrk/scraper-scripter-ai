@@ -5,37 +5,34 @@ from google import genai
 from google.genai import types
 from src.utils.config import CHROMA_DB_DIR, API_KEY_CONFIG
 
-# --- НАСТРОЙКА КЛЮЧА GOOGLE ---
-# Вставьте свой ключ сюда вместо надписи, если не используете .env
 API_KEY = API_KEY_CONFIG 
 
-# --- ФУНКЦИЯ 1: ПОИСК В БАЗЕ (RAG) ---
+# RAG
 def get_rag_context(topic, n_results=3):
     """
     Ищет 3 похожих успешных сценария в вашей локальной базе ChromaDB.
     """
     try:
-        # Подключаемся к базе
+        # connecting to the BD
         client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
         ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         
-        # Получаем коллекцию (если она есть)
+        # collection
         try:
             collection = client.get_collection(name="viral_scripts", embedding_function=ef)
         except ValueError:
             return "База знаний пока пуста. Запустите main.py для обучения."
 
-        # Ищем
+        # search
         results = collection.query(query_texts=[topic], n_results=n_results)
         
-        # Если ничего не нашли
         if not results['documents'] or not results['documents'][0]:
             return "Нет похожих референсов."
 
         docs = results['documents'][0]
         metas = results['metadatas'][0]
         
-        # Формируем красивый текст для ИИ
+        # forming a clean text for the AI
         context_text = ""
         for i, doc in enumerate(docs):
             title = metas[i]['title']
@@ -48,7 +45,7 @@ def get_rag_context(topic, n_results=3):
         print(f"⚠️ Ошибка RAG: {e}")
         return ""
 
-# --- ФУНКЦИЯ 2: ГЕНЕРАЦИЯ (GEMINI) ---
+# gemini
 def ai_audit_script(draft, topic, target_wpm, power_words):
     """
     Основная функция, которую вызывает интерфейс.
@@ -56,16 +53,16 @@ def ai_audit_script(draft, topic, target_wpm, power_words):
     2. Отправляет всё в Google Gemini.
     """
     
-    # 1. Достаем опыт из базы
+    # searching for references
     references = get_rag_context(topic)
     
-    # 2. Подключаемся к Google
+    # connecting to gemini
     try:
         client = genai.Client(api_key=API_KEY)
     except Exception as e:
         return f"Ошибка настройки клиента Google: {e}. Проверьте API Key.", ""
     
-    # 3. Промпт (Инструкция)
+    # prompting
     system_instruction = f"""
     You are an elite UFC content creator. You write viral, high-retention TikTok scripts.
     
@@ -102,7 +99,7 @@ def ai_audit_script(draft, topic, target_wpm, power_words):
     ACTION: Rewrite this into a viral script. Make the Hook (first 3s) impossible to ignore.
     """
 
-    # 4. Отправка запроса
+    # sending the request
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash", # Очень быстрая и умная
